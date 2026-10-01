@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.tox
+.tox/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+*.pdf
+*.docx
+eval_results.json
+tickets.db
+*.db
