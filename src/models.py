@@ -24,6 +24,7 @@ class UploadResponse(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     user_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

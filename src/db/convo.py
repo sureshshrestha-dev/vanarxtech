@@ -15,7 +15,20 @@ def get_or_create_user(db: Session, user_id: Optional[str] = None):
     return resolve_user(db, user_id)
 
 
-def get_or_create_single_conversation(db: Session, user: User):
+def get_or_create_single_conversation(db: Session, user: User, session_id: Optional[str] = None):
+    if session_id:
+        try:
+            convo_uuid = uuid.UUID(session_id)
+        except (ValueError, TypeError, AttributeError):
+            convo_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, str(session_id))
+
+        conversation = db.query(Conversation).filter(Conversation.id == convo_uuid).first()
+        if not conversation:
+            conversation = Conversation(id=convo_uuid, user_id=user.id)
+            db.add(conversation)
+            db.flush()
+        return conversation
+
     conversation = db.query(Conversation).filter(Conversation.user_id == user.id).first()
 
     if not conversation:

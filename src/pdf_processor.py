@@ -6,6 +6,47 @@ from pypdf import PdfReader
 from src.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
+import fitz  # PyMuPDF
+
+
+def detect_hidden_spans(file_bytes: bytes) -> List[Dict[str, Any]]:
+    """
+    Scan PDF bytes for hidden text steganography:
+    - White font on white background (color == 0xFFFFFF / 16777215)
+    - Micro-fonts (font size < 2.0pt)
+    - Off-page rendering (bbox outside visible page bounds)
+    """
+    hidden_findings = []
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        for page_idx, page in enumerate(doc):
+            p_width = page.rect.width
+            p_height = page.rect.height
+            for block in page.get_text("dict").get("blocks", []):
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        text = span.get("text", "").strip()
+                        color = span.get("color", 0)
+                        size = span.get("size", 12)
+                        bbox = span.get("bbox", (0, 0, 0, 0))
+
+                        # Check bounding box off-page positioning
+                        x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
+                        is_off_page = x0 < 0 or y0 < 0 or x1 > (p_width + 10) or y1 > (p_height + 10)
+
+                        if (color in (0xFFFFFF, 16777215) or size < 2.0 or is_off_page) and text:
+                            hidden_findings.append({
+                                "page": page_idx + 1,
+                                "text": text,
+                                "color": hex(color),
+                                "size": size,
+                                "off_page": is_off_page
+                            })
+    except Exception as e:
+        print(f"Steganography scan warning: {e}")
+    return hidden_findings
+
+
 def extract_pages_from_pdf(file_bytes: bytes, filename: str):
     """Read a PDF and return a list of pages with their text content."""
     reader = PdfReader(io.BytesIO(file_bytes))

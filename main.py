@@ -12,7 +12,7 @@ from src.models import (
     TicketRequest, TicketResponse,
     MessageHistory,
 )
-from src.pdf_processor import process_pdf_document
+from src.pdf_processor import process_pdf_document, detect_hidden_spans
 from src.qdrant_setup import qdrant
 from src.agent import run_agent_chat
 from src.db import (
@@ -62,6 +62,15 @@ async def upload_document(file: UploadFile = File(...)):
         file_content = await file.read()
         if not file_content:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        
+        # Quarantine PDFs containing steganographic/hidden text spans
+        hidden_spans = detect_hidden_spans(file_content)
+        if hidden_spans:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Security Quarantine: PDF contains hidden/steganographic text spans ({len(hidden_spans)} detected)."
+            )
+
         document_id = f"doc_{uuid.uuid4().hex[:10]}"
         processed_doc = process_pdf_document(file_content, file.filename, document_id)
         doc_metadata = qdrant.add_document(processed_doc)
@@ -98,13 +107,19 @@ def chat(request: ChatRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="query cannot be empty")
 
+    if len(request.question) > 10000:
+        raise HTTPException(status_code=400, detail="Query length exceeds maximum limit of 10000 characters.")
+
     query_received_at = datetime.now(timezone.utc)
+    # Generate fresh session UUID if none provided to prevent shared default bucket leaks
+    effective_session_id = request.session_id or request.user_id or uuid.uuid4().hex
+
     chat_history = []
     conversation = None
     try:
         with get_db() as db:
             user = resolve_user(db, request.user_id)
-            conversation = get_or_create_single_conversation(db, user)
+            conversation = get_or_create_single_conversation(db, user, session_id=effective_session_id)
             chat_history = load_chat_history(db, conversation, limit=10)
     except Exception as e:
         print(f"failed to load old chat:{e}")
@@ -129,7 +144,7 @@ def chat(request: ChatRequest):
     try:
         with get_db() as db:
             user = resolve_user(db, request.user_id)
-            conv = get_or_create_single_conversation(db, user)
+            conv = get_or_create_single_conversation(db, user, session_id=effective_session_id)
             saved_message = save_message(
                 db=db,
                 conversation=conv,
